@@ -5,6 +5,7 @@
 
 namespace Beacons
 {
+	UNetDriver* GNetDriver = nullptr;
 	bool bSetupCharPartArray = false;
 	bool bSetupFloorLoot = false;
 	bool bMadeEverythingSearched = false;
@@ -16,8 +17,9 @@ namespace Beacons
 
 	void TickFlushHook(UNetDriver* NetDriver, float DeltaSeconds)
 	{
-		Replication::ReplicateActors(NetDriver);
-
+		if (GNetDriver) {
+			Replication::ReplicateActors(NetDriver);
+		}
 		return TickFlush(NetDriver, DeltaSeconds);
 	}
 
@@ -58,6 +60,7 @@ namespace Beacons
 
 	void InitHooks()
 	{
+		static bool hashooked = false;
 		auto BaseAddr = Util::BaseAddress();
 		InitHost = decltype(InitHost)(BaseAddr + Offsets::InitHost);
 		SetWorld = decltype(SetWorld)(BaseAddr + Offsets::SetWorld);
@@ -72,18 +75,23 @@ namespace Beacons
 		}
 
 		Globals::World->NetDriver = Beacon->NetDriver;
+		GNetDriver = Beacon->NetDriver;
 		SetWorld(Globals::World->NetDriver, Globals::World);
 		Globals::World->NetDriver->NetDriverName.ComparisonIndex = 282;
 		Globals::World->LevelCollections[0].NetDriver = Globals::World->NetDriver;
 		Globals::World->LevelCollections[1].NetDriver = Globals::World->NetDriver;
+		
+		if (!hashooked) {
+			hashooked = true;
+			MH_CreateHook((LPVOID)(BaseAddr + Offsets::TickFlush), TickFlushHook, (LPVOID*)(&TickFlush));
+			MH_EnableHook((LPVOID)(BaseAddr + Offsets::TickFlush));
+			MH_CreateHook((LPVOID)(BaseAddr + Offsets::SpawnPlayActor), SpawnPlayActorHook, (LPVOID*)(&SpawnPlayActor));
+			MH_CreateHook((LPVOID)(BaseAddr + Offsets::KickPatch), KickPatch, nullptr);
+			MH_EnableHook((LPVOID)(BaseAddr + Offsets::KickPatch));
 
-		MH_CreateHook((LPVOID)(BaseAddr + Offsets::TickFlush), TickFlushHook, (LPVOID*)(&TickFlush));
-		MH_EnableHook((LPVOID)(BaseAddr + Offsets::TickFlush));
+			Misc::Init();
+		}
 		MH_CreateHook((LPVOID)(BaseAddr + Offsets::SpawnPlayActor), SpawnPlayActorHook, (LPVOID*)(&SpawnPlayActor));
 		MH_EnableHook((LPVOID)(BaseAddr + Offsets::SpawnPlayActor));
-		MH_CreateHook((LPVOID)(BaseAddr + Offsets::KickPatch), KickPatch, nullptr);
-		MH_EnableHook((LPVOID)(BaseAddr + Offsets::KickPatch));
-
-		Misc::Init();
 	}
 }
